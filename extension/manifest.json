@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Read Aloud (local Kokoro)",
+  "version": "0.1.0",
+  "description": "Reads articles and selections aloud with a local Kokoro voice, highlighting each word. Nothing leaves your machine.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvJiSSKksBwyphBfJCEVYQvz1pF5fYRCcIDFJQK3fi/ThqywPbYVcVZJYc6Xr2qMweV8GFfC2GWBkyVcRuOELJA99TPJ3akdgFX1MrYUhRE3jncBHAlxM9/Ifkt3QoUEyEUlthHZO9s64nJTnMYgqi1qWLgUeO7EYE8YfsXEnPET+QL4yv7Fgw0YUXSvioEHJuUbcykw23BDSF3roJ1hC2aIUzp7gB7i6eYJvQBEAAEnc572ppme8AUZqLSp4SvQ1T7kzlJ1TpniDgF8HFSRuVWWNRATupDHe2xwYm3CbZoQP6WrxHr4yKE9fMZ2P2dRyulV/XGfL6FxpqRvGrdukvwIDAQAB",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "contextMenus",
+    "nativeMessaging",
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Read aloud (Alt+Shift+R)"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+Shift+R"
+      },
+      "description": "Read the selection or article; pause or resume"
+    }
+  }
+}
