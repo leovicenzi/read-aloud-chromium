@@ -24,6 +24,16 @@
     return el.checkVisibility ? el.checkVisibility() : el.offsetParent !== null;
   }
 
+  // Screen-reader-only text ("opens in a new tab", "external link") is in the page but
+  // clipped to a pixel or moved off-screen, so a sighted reader never sees it.
+  function screenReaderOnly(el) {
+    const style = getComputedStyle(el);
+    if (style.clip !== "auto" || /inset\(50%/.test(style.clipPath)) return true;
+    const rect = el.getBoundingClientRect();
+    if (style.overflow !== "visible" && (rect.width <= 1 || rect.height <= 1)) return true;
+    return rect.right + scrollX < 0 || rect.bottom + scrollY < 0;
+  }
+
   // <article> or <main> when the page marks one up; otherwise the element whose
   // paragraphs hold the most text (parents get the full score, grandparents half).
   function articleRoot() {
@@ -61,8 +71,17 @@
   function collectBlocks(root, range) {
     const skip = range ? NEVER : `${NEVER},${FURNITURE}`;
     const shown = new Map();
+    // Hidden ancestors hide their text too, so the answer is cached per element up the tree.
+    const hiddenForReaders = new Map();
+    const srOnly = (el) => {
+      if (!el || el === document.body || el === document.documentElement) return false;
+      if (!hiddenForReaders.has(el)) {
+        hiddenForReaders.set(el, screenReaderOnly(el) || srOnly(el.parentElement));
+      }
+      return hiddenForReaders.get(el);
+    };
     const isShown = (el) => {
-      if (!shown.has(el)) shown.set(el, !el.closest(skip) && visible(el));
+      if (!shown.has(el)) shown.set(el, !el.closest(skip) && visible(el) && !srOnly(el));
       return shown.get(el);
     };
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);

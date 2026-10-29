@@ -36,8 +36,10 @@ If you move the folder, run `./scripts/install.sh` again.
 
 ## Use
 
-- **Toolbar button** or **Alt+Shift+R**: reads your selection if there is one, otherwise
+- **Toolbar button** or **Alt+Shift+K**: reads your selection if there is one, otherwise
   the page's article. While reading, the same button pauses and resumes.
+- Chromium's own Alt+Shift+R opens its built-in reader with Google voices, not this one.
+  Change this extension's key at `chrome://extensions/shortcuts`.
 - **Right-click**: "Read selection aloud" or "Read this page aloud".
 
 While a reading session is open, a status bar sits at the bottom of the page and these keys
@@ -87,6 +89,8 @@ Closing or leaving the tab stops the reading at once.
 - Article detection is heuristic. On pages where it picks the wrong part, select the text
   you want and read the selection.
 - Text that the page replaces while it is being read can no longer be highlighted.
+- Text hidden for screen readers only (such as "opens in a new tab" inside links) is
+  skipped, since it is clipped to a pixel or moved off-screen.
 
 ## Development
 

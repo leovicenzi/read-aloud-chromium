@@ -16,12 +16,12 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "Read aloud (Alt+Shift+R)"
+    "default_title": "Read aloud (Alt+Shift+K)"
   },
   "commands": {
     "_execute_action": {
       "suggested_key": {
-        "default": "Alt+Shift+R"
+        "default": "Alt+Shift+K"
       },
       "description": "Read the selection or article; pause or resume"
     }
