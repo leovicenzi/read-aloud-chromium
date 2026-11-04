@@ -148,6 +148,7 @@
   let port = null;
   let overlay = null;
   let lastScroll = 0;
+  let spotlight = null;
   const session = new Session(send, {
     // Separate this tab's ids from other tabs sharing the helper.
     base: 1 + Math.floor(Math.random() * 1e9) * 1000,
@@ -203,22 +204,76 @@
     const style = document.createElement("style");
     style.id = "read-aloud-style";
     style.textContent = `
-      ::highlight(read-aloud-phrase) { background-color: rgba(255, 213, 79, 0.35); }
-      ::highlight(read-aloud-word) { background-color: #ffd54f; color: #111; }`;
+      ::highlight(read-aloud-phrase) { background-color: rgba(255, 213, 79, 0.35); }`;
     document.documentElement.append(style);
+  }
+
+  // The current word is lit by a box that glides from word to word; ::highlight styles
+  // cannot be animated. It is fixed to the viewport, so scrolling repositions it.
+  function ensureSpotlight() {
+    if (spotlight) return spotlight;
+    const host = document.createElement("read-aloud-spotlight");
+    const shadow = host.attachShadow({ mode: "closed" });
+    shadow.innerHTML = `<style>
+      div { position: fixed; left: 0; top: 0; z-index: 2147483646; pointer-events: none;
+        border-radius: 4px; background: rgba(255, 200, 40, 0.6); mix-blend-mode: multiply;
+        box-shadow: 0 0 8px 2px rgba(255, 200, 40, 0.45); opacity: 0;
+        transition: transform 160ms ease-out, width 160ms ease-out, height 160ms ease-out,
+          opacity 200ms ease-out; }
+      div.jump { transition: opacity 200ms ease-out; }
+      </style><div></div>`;
+    document.documentElement.append(host);
+    spotlight = { host, box: shadow.querySelector("div"), range: null, rect: null };
+    addEventListener("scroll", placeSpotlight, { capture: true, passive: true });
+    addEventListener("resize", placeSpotlight, { passive: true });
+    return spotlight;
+  }
+
+  function removeSpotlight() {
+    if (!spotlight) return;
+    spotlight.host.remove();
+    spotlight = null;
+    removeEventListener("scroll", placeSpotlight, { capture: true });
+    removeEventListener("resize", placeSpotlight);
+  }
+
+  // Glides to a word on the same line; jumps to a new line, a new phrase, or after a scroll,
+  // where a glide would cut across the text.
+  function placeSpotlight(event) {
+    if (!spotlight) return;
+    const { box, range, rect: last } = spotlight;
+    const rect = range && range.getClientRects()[0];
+    if (!rect) {
+      box.style.opacity = "0";
+      spotlight.rect = null;
+      return;
+    }
+    const glide = !event && last && box.style.opacity === "1" &&
+      Math.abs(rect.top - last.top) < rect.height / 2;
+    box.classList.toggle("jump", !glide);
+    const pad = 2;
+    box.style.transform = `translate(${rect.left - pad}px, ${rect.top - pad}px)`;
+    box.style.width = `${rect.width + pad * 2}px`;
+    box.style.height = `${rect.height + pad * 2}px`;
+    box.style.opacity = "1";
+    spotlight.rect = rect;
   }
 
   function paint() {
     CSS.highlights.delete("read-aloud-phrase");
-    CSS.highlights.delete("read-aloud-word");
     const mark = session.highlight;
-    if (!mark) return;
+    const phrase = mark && chunkRange(mark.chunk, null);
+    if (!phrase) {
+      removeSpotlight();
+      return;
+    }
     ensureStyle();
-    const phrase = chunkRange(mark.chunk, null);
-    if (!phrase) return;
     CSS.highlights.set("read-aloud-phrase", new Highlight(phrase));
     const word = mark.word && chunkRange(mark.chunk, mark.word);
-    if (word) CSS.highlights.set("read-aloud-word", new Highlight(word));
+    if (word || session.phase === "loading") {
+      ensureSpotlight().range = word;
+      placeSpotlight();
+    }
     if (session.follow && mark.chunk !== lastScroll) {
       lastScroll = mark.chunk;
       const rect = phrase.getBoundingClientRect();
@@ -229,9 +284,15 @@
     }
   }
 
+  function remainingText(seconds) {
+    if (seconds === null) return "";
+    return seconds < 60 ? "<1 min left" : `~${Math.round(seconds / 60)} min left`;
+  }
+
   function statusText() {
     const n = session.chunks.length;
-    const at = `${Math.min(session.current + 1, n)}/${n}`;
+    const left = remainingText(session.remainingSeconds());
+    const at = `${Math.min(session.current + 1, n)}/${n}${left ? ` · ${left}` : ""}`;
     const chunk = session.chunks[session.current];
     const lang = chunk ? LABELS[chunk.lang] : "";
     const speed = `${session.speed.toFixed(1)}×`;

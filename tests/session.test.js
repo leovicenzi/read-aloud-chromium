@@ -119,3 +119,31 @@ test("speed is clamped and rounded", () => {
   for (let i = 0; i < 40; i++) session.adjustSpeed(-0.1);
   assert.equal(session.speed, 0.5);
 });
+
+test("remaining time follows the measured pace and the speed", () => {
+  let now = 0;
+  const chunks = [chunk("a".repeat(300), 0), chunk("b".repeat(300), 0), chunk("c".repeat(300), 1)];
+  const session = new Session(() => {}, { now: () => now, base: 100 });
+  session.start(chunks);
+  const id = session.id;
+  assert.equal(session.remainingSeconds(), 60, "900 chars at the default 15 chars/s");
+  session.adjustSpeed(1);
+  assert.equal(session.remainingSeconds(), 30, "twice the speed, half the time");
+  session.adjustSpeed(-1);
+  // The first phrase takes 30 s at 1×: 10 chars/s, blended with the 300-char prior.
+  session.onEvent({ event: "progress", id, chunk: 0, start: 0, end: 1 });
+  now = 30000;
+  session.onEvent({ event: "progress", id, chunk: 1, start: 0, end: 1 });
+  assert.equal(session.pace.chars, 600);
+  assert.equal(session.pace.seconds, 50);
+  assert.equal(session.remainingSeconds(), 50, "600 chars at 12 chars/s");
+  // A pause between phrases is not reading time.
+  session.togglePause();
+  session.togglePause();
+  now = 900000;
+  session.onEvent({ event: "progress", id, chunk: 2, start: 0, end: 1 });
+  assert.equal(session.pace.seconds, 50);
+  assert.equal(session.remainingSeconds(), 25);
+  session.stop();
+  assert.equal(session.remainingSeconds(), null);
+});

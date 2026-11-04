@@ -9,6 +9,10 @@
   const MAX_CHUNKS = 2048;
   const MAX_BYTES = 256 * 1024;
   const encoder = new TextEncoder();
+  // Reading pace at 1× before any phrase has been timed, in characters per second, and how
+  // many characters of it to blend with measured phrases so early guesses stay steady.
+  const DEFAULT_PACE = 15;
+  const PACE_PRIOR_CHARS = 300;
 
   function clampSpeed(speed) {
     return Number.isFinite(speed) ? Math.min(MAX_SPEED, Math.max(MIN_SPEED, speed)) : 1;
@@ -45,6 +49,9 @@
       this.follow = true;
       this.busyAt = now();
       this.released = true; // no helper holds this session: only a speak can reach one
+      // Timed phrases at 1×, kept across sessions: they describe the voice, not the page.
+      this.pace = { chars: PACE_PRIOR_CHARS, seconds: PACE_PRIOR_CHARS / DEFAULT_PACE };
+      this.timing = null; // {chunk, at}: when uninterrupted playback of a phrase began
     }
 
     inSession() {
@@ -84,6 +91,7 @@
       this.windowBase = at;
       this.windowEnd = at;
       this.elapsed = 0;
+      this.timing = null;
       let bytes = 0;
       for (let i = at; i < this.chunks.length && i - at < MAX_CHUNKS; i++) {
         const size = encoder.encode(this.chunks[i].text).length;
@@ -153,6 +161,7 @@
         return;
       }
       this.phase = paused ? "paused" : "loading";
+      this.timing = null;
       this.send({ cmd: "pause", id: this.id, paused });
     }
 
@@ -178,10 +187,12 @@
       this.elapsed = 0;
       this.windowBase = 0;
       this.windowEnd = 0;
+      this.timing = null;
     }
 
     adjustSpeed(delta) {
       this.speed = clampSpeed(Math.round((this.speed + delta) * 10) / 10);
+      this.timing = null;
       if (this.active()) this.send({ cmd: "speed", id: this.id, speed: this.speed });
     }
 
@@ -205,6 +216,7 @@
           if (start < end) word = [start, end];
         }
         this.highlight = { chunk: at, word };
+        this.timePhrase(at);
         if (this.phase !== "paused") this.phase = "speaking";
         return true;
       }
@@ -226,6 +238,31 @@
         return true;
       }
       return false;
+    }
+
+    // A phrase played straight through to the next one, with no pause, seek, or speed
+    // change between, measures the pace. Time is wall time, so gaps between phrases count.
+    timePhrase(at) {
+      const now = this.now();
+      if (this.timing && at === this.timing.chunk + 1) {
+        const seconds = ((now - this.timing.at) / 1000) * this.speed;
+        const chars = this.chunks[this.timing.chunk].text.length;
+        if (seconds > 0 && seconds < 120) {
+          this.pace.chars += chars;
+          this.pace.seconds += seconds;
+        }
+      }
+      if (this.timing?.chunk !== at) this.timing = { chunk: at, at: now };
+    }
+
+    // Estimated seconds of reading left at the current speed, or null outside a session.
+    remainingSeconds() {
+      if (!this.chunks.length) return null;
+      let chars = 0;
+      for (let i = this.current; i < this.chunks.length; i++) chars += this.chunks[i].text.length;
+      const mark = this.highlight;
+      if (mark && mark.chunk === this.current && mark.word) chars -= mark.word[0];
+      return chars / ((this.pace.chars / this.pace.seconds) * this.speed);
     }
 
     // True once the helper has been neither loading nor playing for HELPER_IDLE_MS: the
