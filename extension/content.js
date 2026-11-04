@@ -277,11 +277,27 @@
     if (session.follow && mark.chunk !== lastScroll) {
       lastScroll = mark.chunk;
       const rect = phrase.getBoundingClientRect();
-      if (rect.top < 60 || rect.bottom > innerHeight - 80) {
-        const el = phrase.startContainer.parentElement;
-        if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
+      const el = phrase.startContainer.parentElement;
+      const shown = el && shownArea(el);
+      if (el && (rect.top < shown.top + 60 || rect.bottom > shown.bottom - 80)) {
+        el.scrollIntoView({ block: "center", behavior: "smooth" });
       }
     }
+  }
+
+  // The part of the viewport where el can show: the window cut down to each scrolling
+  // panel around it, since many sites scroll the text inside a panel, not the page.
+  function shownArea(el) {
+    let top = 0;
+    let bottom = innerHeight;
+    for (let p = el.parentElement; p && p !== document.body && p !== document.documentElement;
+      p = p.parentElement) {
+      if (p.scrollHeight <= p.clientHeight || !/auto|scroll|overlay/.test(getComputedStyle(p).overflowY)) continue;
+      const box = p.getBoundingClientRect();
+      top = Math.max(top, box.top + p.clientTop);
+      bottom = Math.min(bottom, box.top + p.clientTop + p.clientHeight);
+    }
+    return { top, bottom };
   }
 
   function remainingText(seconds) {
